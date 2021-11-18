@@ -1,0 +1,35 @@
+[gmedian@localhost .ansible]$ ls -laR
+.:
+total 4
+drwx------.  4 gmedian gmedian   32 Nov 15 18:20 .
+drwx------. 19 gmedian gmedian 4096 Nov 15 18:17 ..
+drwxrwxr-x.  4 gmedian gmedian   35 Nov 15 18:22 plugins
+drwx------.  2 gmedian gmedian    6 Nov 15 18:22 tmp
+
+./plugins:
+total 0
+drwxrwxr-x. 4 gmedian gmedian 35 Nov 15 18:22 .
+drwx------. 4 gmedian gmedian 32 Nov 15 18:20 ..
+drwxrwxr-x. 3 gmedian gmedian 43 Nov 15 18:22 action
+drwxrwxr-x. 2 gmedian gmedian 24 Nov 15 18:07 modules
+
+./plugins/action:
+total 0
+drwxrwxr-x. 3 gmedian gmedian 43 Nov 15 18:22 .
+drwxrwxr-x. 4 gmedian gmedian 35 Nov 15 18:22 ..
+drwxrwxr-x. 2 gmedian gmedian 36 Nov 15 18:22 __pycache__
+lrwxrwxrwx. 1 gmedian gmedian 79 Nov 15 18:07 vulners.py -> /home/gmedian/Documents/projects/vulners/integrations/ansible/plugin/vulners.py
+
+./plugins/action/__pycache__:
+total 4
+drwxrwxr-x. 2 gmedian gmedian  36 Nov 15 18:22 .
+drwxrwxr-x. 3 gmedian gmedian  43 Nov 15 18:22 ..
+-rw-rw-r--. 1 gmedian gmedian 982 Nov 15 18:22 vulners.cpython-36.pyc
+
+./plugins/modules:
+total 0
+drwxrwxr-x. 2 gmedian gmedian 24 Nov 15 18:07 .
+drwxrwxr-x. 4 gmedian gmedian 35 Nov 15 18:22 ..
+lrwxrwxrwx. 1 gmedian gmedian 79 Nov 15 18:07 vulners.py -> /home/gmedian/Documents/projects/vulners/integrations/ansible/module/vulners.py
+
+
