@@ -3,8 +3,10 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-from ansible.plugins.action import ActionBase
 import json
+import os
+
+from ansible.plugins.action import ActionBase
 from requests import post
 
 DOCUMENTATION = """
@@ -36,13 +38,27 @@ class ActionModule(ActionBase):
         'cveChecker': 'https://vulners.com/api/v3/search/id/'
     }
 
+    KEY_NAME = 'api_key'
+    KEY_FILE_NAME = 'api_key_file'
+
+    DEFAULT_FILE_NAME = '.vulners.ansible.env'
+
+    RESULT_FILE_NAME = '/tmp/vulners_ansible_result.json'
+
     def run(self, tmp=None, task_vars=None):
 
-        if 'vulners_api_key' not in self._task.args:
-            return {"failed": True, "msg": "'vulners_api_key' argument is required"}
+        #if self.KEY_NAME not in self._task.args:
+        #    if self.KEY_FILE_NAME not in self._task.args:
+        #        return {"failed": True, "msg": "One of '%s' or '%s' arguments is required" %(self.KEY_NAME, self.KEY_FILE_NAME)}
+        
 
         # Need to pop value, otherwise further module executions would fail (seemingly of unexpected arg)
-        self.key = self._task.args.pop('vulners_api_key')
+        self.key = self.get_key()
+
+        if not self.key:
+            # It means no option for key was givena nad no default file was found
+            return {"failed": True, "msg": "No API key was found"}
+
         #return dict(ansible_facts=dict(result={"done":self._task.args, "vars": self._task.vars}))
 
         super(ActionModule, self).run(tmp, task_vars)
@@ -57,7 +73,7 @@ class ActionModule(ActionBase):
             except:
                 bad.append(name)
         
-        osname, osversion = self.get_os_info(tmp=tmp, task_vars=task_vars)
+        hostname, osname, osversion = self.get_os_info(tmp=tmp, task_vars=task_vars)
         
         payload = {
             'os': osname,
@@ -84,8 +100,14 @@ class ActionModule(ActionBase):
         
         vulns = self.get_cve_info(result.get('all_cve'))
     
-        with open("/tmp/txt.txt", "w") as ofile:
-            ofile.write(json.dumps(result, indent=2))
+        r_old = dict()
+        if os.path.isfile(self.RESULT_FILE_NAME):
+            with open(self.RESULT_FILE_NAME, "r") as ifile:
+                r_old = json.load(ifile)
+        
+        with open(self.RESULT_FILE_NAME, "w") as ofile:
+            r_old[hostname] = result
+            json.dump(r_old, ofile, indent=2)
 
         with open("/tmp/txt_vuln.txt", "w") as ofile:
             ofile.write(json.dumps(vulns, indent=2))
@@ -93,12 +115,25 @@ class ActionModule(ActionBase):
 
         return dict(ansible_facts=dict(result={"done":"OK"}))
 
+    # TODO[gmedian]: pop rest of args not ot fail further execution
     def get_key(self):
-        return self._task.args.get("vulners_api_key", self.key) #"VIG5SJWLQL65FC9WLXGE35W0C842VT8P9RZ1STQG0B56TV9914ZTW4SHUQNVMHC0"
+        if self.KEY_NAME in self._task.args:
+            self._task.args.pop(self.KEY_FILE_NAME, None)
+            return self._task.args.pop(self.KEY_NAME)
+
+        filename = self._task.args.pop(self.KEY_FILE_NAME, self.DEFAULT_FILE_NAME)
+
+        if os.path.isfile(filename):
+            with open(filename, 'r') as ifile:
+                return ifile.read().strip('\n \t')
+
+        return None 
 
     def get_os_info(self, tmp=None, task_vars=None):
         module_return = self._execute_module(module_name='setup', tmp=tmp, task_vars=task_vars)
-        return module_return['ansible_facts'].get('ansible_distribution',''), module_return['ansible_facts'].get('ansible_distribution_major_version','')
+        with open('/tmp/os_info.txt', 'w') as ofile:
+            json.dump(module_return, ofile, indent=2)
+        return module_return['ansible_facts'].get('ansible_hostname',''), module_return['ansible_facts'].get('ansible_distribution',''), module_return['ansible_facts'].get('ansible_distribution_major_version','')
 
     def log(self, msg):
         print(msg)
