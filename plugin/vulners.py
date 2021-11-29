@@ -5,6 +5,7 @@ __metaclass__ = type
 
 import json
 import os
+import re
 from time import sleep
 
 from ansible.plugins.action import ActionBase
@@ -80,14 +81,17 @@ class ActionModule(ActionBase):
                 elif source == 'apt':
                     packages += ['%(name)s %(version)s %(arch)s'%k for k in pkg_list]
                 elif source == 'apk':
-                    packages += ['%(name)s-%(version)s-%(release)s'%k for k in pkg_list]
+                    packages += ['%(name)s-%(version)s-%(release)s x86_64 {%(name)s} (GPL-2.0-only) [installed]'%k for k in pkg_list]
                 else:
                     self.error(f'Unknown source {source}')
             except Exception as e:
                 self.error(e)
                 bad.append(name)
 
-        hostname, osname, osversion = self.get_os_info(tmp=tmp, task_vars=task_vars)
+        hostname, osname, osversion, osdversion = self.get_os_info(tmp=tmp, task_vars=task_vars)
+        #TODO Dirty
+        if osname == 'Alpine':
+            osversion = re.match('\d+\.\d+', osdversion).group(0)
 
         if not len(packages):
             self.error(f'No packages found for {hostname} - {osname} v.{osversion}')
@@ -99,7 +103,7 @@ class ActionModule(ActionBase):
             'package': packages,
             'apiKey': self.get_key()
         }
-        
+
         self.log("Running scan of %s with version %s" %(osname, osversion))
         res = post(self.VULNERS_LINKS.get('pkgChecker'), headers=self.DEFAULT_HEADERS, data=json.dumps(payload))
 
@@ -114,7 +118,6 @@ class ActionModule(ActionBase):
         result = dict()
         all_cve = list()
 
-        self.log(f'[INFO] {status} - {data}')
         if res.status_code == 200 and status == "OK":
             for pkg, info in data.get('packages', {}).items():
                 cvelist = []
@@ -140,6 +143,7 @@ class ActionModule(ActionBase):
         with open("/tmp/txt_vuln.txt", "w") as ofile:
             ofile.write(json.dumps(vulns, indent=2))
 
+        self.log(f"[Vulns] {vulns}")
 
         return dict(ansible_facts=dict(result={"done":"OK"}))
 
@@ -161,7 +165,7 @@ class ActionModule(ActionBase):
         module_return = self._execute_module(module_name='setup', tmp=tmp, task_vars=task_vars)
         with open('/tmp/os_info.txt', 'w') as ofile:
             json.dump(module_return, ofile, indent=2)
-        return module_return['ansible_facts'].get('ansible_hostname',''), module_return['ansible_facts'].get('ansible_distribution',''), module_return['ansible_facts'].get('ansible_distribution_major_version','')
+        return module_return['ansible_facts'].get('ansible_hostname',''), module_return['ansible_facts'].get('ansible_distribution',''), module_return['ansible_facts'].get('ansible_distribution_major_version',''), module_return['ansible_facts'].get('ansible_distribution_version','')
 
     def log(self, msg):
         print(msg)
