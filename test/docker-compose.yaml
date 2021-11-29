@@ -1,0 +1,7 @@
+version: "0.1"
+
+services:
+  ssh:
+    build: .
+    ports:
+      - "2222:22"

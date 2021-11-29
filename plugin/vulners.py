@@ -5,6 +5,7 @@ __metaclass__ = type
 
 import json
 import os
+from time import sleep
 
 from ansible.plugins.action import ActionBase
 from requests import post
@@ -67,14 +68,31 @@ class ActionModule(ActionBase):
 
         packages = list()
         bad = list()
+
         for name, pkg_list in module_return['ansible_facts']['packages'].items():
             try:
-                packages += ['%(name)s-%(version)s-%(release)s.%(arch)s'%k for k in pkg_list]
-            except:
+                # TODO GMedian - release is appeared only for RPM based package manager
+                # (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/package_facts_module.html#return-ansible_facts/packages)
+
+                source = pkg_list[0].get('source')
+                if source == 'rpm':
+                    packages += ['%(name)s-%(version)s-%(release)s.%(arch)s'%k for k in pkg_list]
+                elif source == 'apt':
+                    packages += ['%(name)s %(version)s %(arch)s'%k for k in pkg_list]
+                elif source == 'apk':
+                    packages += ['%(name)s-%(version)s-%(release)s'%k for k in pkg_list]
+                else:
+                    self.error(f'Unknown source {source}')
+            except Exception as e:
+                self.error(e)
                 bad.append(name)
-        
+
         hostname, osname, osversion = self.get_os_info(tmp=tmp, task_vars=task_vars)
-        
+
+        if not len(packages):
+            self.error(f'No packages found for {hostname} - {osname} v.{osversion}')
+            return dict(ansible_facts={})
+
         payload = {
             'os': osname,
             'version': osversion,
@@ -82,13 +100,23 @@ class ActionModule(ActionBase):
             'apiKey': self.get_key()
         }
         
-        self.log("Running scan of %s with %s" %(osname, osversion))
+        self.log("Running scan of %s with version %s" %(osname, osversion))
         res = post(self.VULNERS_LINKS.get('pkgChecker'), headers=self.DEFAULT_HEADERS, data=json.dumps(payload))
 
-        if res.status_code == 200 and res.json().get('result') == "OK":
-            result = dict()
-            all_cve = list()
-            for pkg, info in res.json()['data'].get('packages', {}).items():
+        status = res.json().get('result')
+        data = res.json().get('data')
+
+        if status == 'error':
+            # For example if license expired
+            self.error(f'Scan failed for {hostname} - {osname} v.{osversion} \n {data}')
+            return dict(ansible_facts=data)
+
+        result = dict()
+        all_cve = list()
+
+        self.log(f'[INFO] {status} - {data}')
+        if res.status_code == 200 and status == "OK":
+            for pkg, info in data.get('packages', {}).items():
                 cvelist = []
                 for vuln_name, desc in info.items():
                     cvelist.append(sum(map(lambda x: x.get("cvelist", []), desc), []))
@@ -97,9 +125,9 @@ class ActionModule(ActionBase):
                     result[pkg] = {"cve": cvelist}
                     all_cve += cvelist
             result['all_cve'] = all_cve
-        
+
         vulns = self.get_cve_info(result.get('all_cve'))
-    
+
         r_old = dict()
         if os.path.isfile(self.RESULT_FILE_NAME):
             with open(self.RESULT_FILE_NAME, "r") as ifile:
@@ -137,6 +165,9 @@ class ActionModule(ActionBase):
 
     def log(self, msg):
         print(msg)
+
+    def error(self, msg):
+        print(f'\033[91m[ERROR] - {msg}')
 
     def get_cve_info(self, all_cve=list()):
         payload_2 = {
