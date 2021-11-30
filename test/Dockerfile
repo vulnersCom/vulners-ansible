@@ -1,5 +1,6 @@
 FROM alpine:3.11
 
+RUN apk update
 RUN apk add --update --no-cache openssh openrc sudo python3
 RUN rc-update add sshd
 RUN rc-status
