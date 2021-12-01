@@ -30,15 +30,6 @@ DOCUMENTATION = """
               - name: vulners_api_key
             env:
               - name: VULNERS_API_KEY
-        vulners_full_description:
-            description: Show full vulnerability description 
-            ini:
-              - section: vulners_section
-                key: vulners_full_description
-            vars:
-              - name: vulners_full_description
-            env:
-              - name: VULNERS_FULL_DESCRIPTION
 """
 
 class ActionModule(ActionBase):
@@ -58,6 +49,7 @@ class ActionModule(ActionBase):
     DEFAULT_FILE_NAME = '.vulners.ansible.env'
 
     RESULT_FILE_NAME = '/tmp/vulners_ansible_result.json'
+    RESULT_HTML_FILE_NAME = '/tmp/vulners_ansible_result.html'
 
     def run(self, tmp=None, task_vars=None):
 
@@ -97,7 +89,7 @@ class ActionModule(ActionBase):
                 self.error(e)
                 bad.append(name)
 
-        hostname, osname, osversion, osdversion = self.get_os_info(tmp=tmp, task_vars=task_vars)
+        hostname, osname, osversion, osdversion, address = self.get_os_info(tmp=tmp, task_vars=task_vars)
 
         if osname == 'Alpine': #TODO Dirty
             osversion = re.match('\d+\.\d+', osdversion).group(0)
@@ -110,11 +102,11 @@ class ActionModule(ActionBase):
 
         vuln_details = self.get_cve_info(vuln_packages.get('all_cve'))
 
-        result = self.write_results(hostname, vuln_packages, vuln_details)
+        result = self.write_results(hostname, address, vuln_packages, vuln_details)
 
-        return dict(ansible_facts=dict(result={"done":"OK", "result": result}))
+        return dict(ansible_facts=dict(result={"done":"OK", "result": {"JSON_FILE": self.RESULT_FILE_NAME, "HTML_FILE": self.RESULT_HTML_FILE_NAME}}))
 
-    def write_results(self, hostname, vuln_packages, vuln_details):
+    def write_results(self, hostname, address, vuln_packages, vuln_details):
         result = {
             'hosts': {},
             'cve_list': {}
@@ -124,7 +116,11 @@ class ActionModule(ActionBase):
                 result = json.load(ifile)
 
         with open(self.RESULT_FILE_NAME, "w") as ofile:
-            result['hosts'][hostname] = vuln_packages
+            result['hosts'][address] = {
+                'ip': address,
+                'hostname': hostname,
+                'packages': vuln_packages
+            }
             result['cve_list'].update(vuln_details)
             json.dump(result, ofile, indent=2)
 
@@ -133,10 +129,15 @@ class ActionModule(ActionBase):
         return result
 
     def write_html(self, result):
-        with open("/tmp/vulners_ansible_result.html", "w") as ofile:
+        with open(self.RESULT_HTML_FILE_NAME, "w") as ofile:
             b64 = base64.b64encode(json.dumps(result, indent=2).encode('utf-8')).decode('utf-8')
             ofile.write(f'''<html>
-                <body><pre><code>{b64}</code></pre></body>
+                <head>
+                    <meta name='viewport' content='width=900'><title>Vulnerability Inventory</title>
+                    <style>code{{display:none}}body{{font-family:monospace;padding:16px;margin:0}}th{{text-align:left}}td{{vertical-align:top;border:solid 1px #fff;padding:4px}}a{{color:#f60}}.cve{{width:120px;min-width:120px}}.package{{width:200px;min-width:200px}}.score{{min-width:40px}}.table-line{{border-top:1px solid #d3d3d3}}</style>
+                </head>
+                <body><pre><code style="display:none;">{b64}</code></pre><div id='root'></div></body>
+                <script>let hosts={{}},cveList={{}};const parse=()=>{{const e=JSON.parse(atob(document.querySelector("code").innerText));hosts=e.hosts,cveList=e.cve_list,render()}},render=()=>{{const e=Object.keys(hosts).map((e=>getHost(hosts[e],cveList))),t=document.getElementById("root");t.innerHTML=e,document.body.appendChild(t)}},getHost=(e,t)=>{{const n=esc(e.ip+" - "+e.hostname);return`<div>\n <h2>\n ${{n}}\n </h2>\n <table>\n <tr>\n <th>Package</td>\n <th>Vulnerabilities</td>\n </tr>\n ${{Object.keys(e.packages).filter((e=>"all_cve"!==e)).map((s=>getPackage(n,s,e.packages[s].cve,t))).join(" ")}}\n </table>\n </div>`}},getPackage=(e,t,n,s)=>`<tr class='table-line'>\n <td class='table-line package'>${{esc(t)}}</td>\n <td class='table-line'>\n <table>\n <tbody>\n ${{n.sort(((e,t)=>s[t].score-s[e].score)).map((e=>getVulnerability(e,s[e]))).join(" ")}}\n </tbody>\n </table>\n </td>\n </tr>`,getVulnerability=(e,t)=>{{const n=t.score||t.vulnersScore,s=getColor(n);return`\n <tr>\n <td class='cve'><a href='https://vulners.com/cve/${{esc(e)}}' target='_blank' rel='noreferrer noopener'>${{esc(e)}}</a></td>\n <td class='score' style='color:${{s}}'>${{esc(t.severityText)}}</td>\n <td class='score' style='color:${{s}}'>${{n}}</td>\n <td>${{esc(t.title===e?t.description:t.title)}}</td>\n </tr>`}},esc=e=>e.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"),COLORS=["#00c400","#00e020","#00f000","#d1ff00","#ffe000","#ffcc00","#ffbc10","#ff9c20","#ff8000","#ff0000","#ff0000"],getColor=e=>COLORS[parseInt(e||0)];document.addEventListener("DOMContentLoaded",parse);</script>
             </html>''')
 
     def get_vulnerable_packages(self, hostname, osname, osversion, packages):
@@ -192,7 +193,11 @@ class ActionModule(ActionBase):
         module_return = self._execute_module(module_name='setup', tmp=tmp, task_vars=task_vars)
         with open('/tmp/os_info.txt', 'w') as ofile:
             json.dump(module_return, ofile, indent=2)
-        return module_return['ansible_facts'].get('ansible_hostname',''), module_return['ansible_facts'].get('ansible_distribution',''), module_return['ansible_facts'].get('ansible_distribution_major_version',''), module_return['ansible_facts'].get('ansible_distribution_version','')
+        return module_return['ansible_facts'].get('ansible_hostname',''), \
+               module_return['ansible_facts'].get('ansible_distribution',''), \
+               module_return['ansible_facts'].get('ansible_distribution_major_version',''), \
+               module_return['ansible_facts'].get('ansible_distribution_version',''), \
+               module_return['ansible_facts'].get('ansible_default_ipv4', {}).get('address')
 
     def log(self, msg):
         print(msg)
@@ -209,7 +214,6 @@ class ActionModule(ActionBase):
         cve_info = dict()
         if res.status_code == 200 and res.json().get('result') == "OK":
             for cve, info in res.json()['data'].get('documents', {}).items():
-                self.log(info)
                 score = info.get('cvss', {}).get('score')
                 vulnersScore = info.get('enchantments', {}).get('vulnersScore')
                 title = info.get('title')
