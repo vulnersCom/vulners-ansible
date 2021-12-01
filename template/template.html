@@ -1,0 +1,127 @@
+<html>
+<head>
+    <meta name='viewport' content='width=900'>
+    <title>Vulnerability Inventory</title>
+</head>
+<body>
+    <pre>
+        <code>
+            {{json}}}
+        </code>
+    </pre>
+    <div id='root'></div>
+</body>
+
+<script>
+    let hosts = {}
+    let cveList = {}
+
+    const parse = () => {
+        const data = JSON.parse(atob(document.querySelector('code').innerText))
+        hosts = data.hosts
+        cveList = data.cve_list
+        render()
+    }
+
+    const render = () => {
+        const content = Object.keys(hosts).map(address => getHost(hosts[address], cveList))
+        const div = document.getElementById('root')
+        div.innerHTML = content
+        document.body.appendChild(div)
+    }
+
+    const getHost = (host, vulnerabilities) => {
+        const hostname = esc(host.ip + ' - ' + host.hostname)
+
+        return `<div>
+                    <h2>
+                        ${hostname}
+                    </h2>
+                    <table>
+                            <tr>
+                                <th>Package</td>
+                                <th>Vulnerabilities</td>
+                            </tr>
+                            ${Object.keys(host.packages)
+            .filter(p => p !== 'all_cve')
+            .map(packageName => getPackage(hostname, packageName, host.packages[packageName].cve, vulnerabilities))
+            .join(' ')}
+                    </table>
+                </div>`
+    }
+
+    const getPackage = (hostname, packageName, cveList, vulnerabilities) => {
+        return `<tr class='table-line'>
+                    <td class='table-line package'>${esc(packageName)}</td>
+                    <td class='table-line'>
+                        <table>
+                        <tbody>
+                            ${cveList
+            .sort((a,b) => vulnerabilities[b].score - vulnerabilities[a].score)
+            .map(cve => getVulnerability(cve, vulnerabilities[cve]))
+            .join(' ')}
+                        </tbody>
+                        </table>
+                    </td>
+                </tr>`
+    }
+
+    const getVulnerability = (cve, data) => {
+
+        const score = data.score || data.vulnersScore
+        const color = getColor(score)
+        return `
+        <tr>
+            <td class='cve'><a href='https://vulners.com/cve/${esc(cve)}' target='_blank' rel='noreferrer noopener'>${esc(cve)}</a></td>
+            <td class='score' style='color:${color}'>${esc(data.severityText)}</td>
+            <td class='score' style='color:${color}'>${score}</td>
+            <td>${esc(data.title === cve ? data.description : data.title)}</td>
+        </tr>`
+    }
+
+    const esc = (content) => {
+        return content.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll(`"`, '&quot;').replaceAll(`'`, '&#039;');
+    }
+
+    const COLORS = ['#00c400','#00e020','#00f000','#d1ff00','#ffe000','#ffcc00','#ffbc10','#ff9c20','#ff8000','#ff0000','#ff0000'];
+    const getColor = (score) => COLORS[parseInt(score || 0)]
+
+    document.addEventListener('DOMContentLoaded', parse)
+</script>
+
+<style>
+    code {
+        display: none;
+    }
+    body {
+        font-family: monospace;
+        padding: 16px;
+        margin: 0;
+    }
+    th {
+        text-align: left;
+    }
+    td {
+        vertical-align: top;
+        border: solid 1px #fff;
+        padding: 4px;
+    }
+    a {
+        color: #ff6600
+    }
+    .cve {
+        width: 120px;
+        min-width: 120px;
+    }
+    .package {
+        width: 200px;
+        min-width: 200px;
+    }
+    .score {
+        min-width: 40px
+    }
+    .table-line {
+        border-top: 1px solid lightgray;
+    }
+</style>
+</html>
