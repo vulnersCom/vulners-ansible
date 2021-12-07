@@ -1,0 +1,16 @@
+namespace: "gmedian"
+name: "vulners_ansible_plugin"
+version: "0.0.1"
+readme: "README.md"
+authors:
+    - "vankyver (https://github.com/vankyver)"
+    - "GMedian"
+license:
+    - "GPLv3"
+tags:
+    - security
+repository: "https://github.com/GMedian/vulners-ansible"
+build_ignore:
+    - test
+    - .gitignore
+    - '*.env'

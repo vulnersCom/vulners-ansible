@@ -12,7 +12,7 @@ Vulners is a vulnerability database and vulnerability assessment and management 
 ## Usage
 
 ```bash
-ansible all -m vulners
+ansible all -m <namespace>.<collection_name>.vulners
 ```
 
 ## DEV Installation
@@ -35,7 +35,14 @@ webgoat.io:2222 ansible_user=test
 ```
 Link vulners plugin to local Ansible modules
 ```bash
-ln -s ./plugin/vulners.py ~/.ansible/plugins/modules/vulners.py
+ln -s ./plugins/action/vulners.py ~/.ansible/plugins/action/vulners.py
+ln -s ./plugins/modules/vulners.py ~/.ansible/plugins/modules/vulners.py
+```
+
+Or use local collection
+```bash
+ansible-galaxy collection build
+ansible-galaxy collection install <name>
 ```
 
 

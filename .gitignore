@@ -4,3 +4,4 @@ ansible.cfg
 
 test/.ssh/authorized_keys
 test/.ash_history
+.idea/
