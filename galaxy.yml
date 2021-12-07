@@ -6,7 +6,7 @@ authors:
     - "vankyver (https://github.com/vankyver)"
     - "GMedian"
 license:
-    - "GPLv3"
+    - "GPL-3.0-only"
 tags:
     - security
 repository: "https://github.com/GMedian/vulners-ansible"
