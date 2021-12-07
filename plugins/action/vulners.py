@@ -7,30 +7,12 @@ import base64
 import json
 import os
 import re
-from time import sleep
 
 from ansible.errors import AnsibleError
 from ansible.module_utils.common.text.converters import to_native
 from ansible.plugins.action import ActionBase
 from requests import post
 
-DOCUMENTATION = """
-    name: vulners
-    short_description: Check target host for vulnerable packages
-    description:
-        - This plugins allows you to check check whether you have vulnerable packages installed on the target system.
-    author: gmedian
-    options:
-        vulners_api_key:
-            description: You key for Vulners API (obtain one at https://vulners.com/)
-            ini:
-              - section: vulners_section
-                key: vulners_api_key
-            vars:
-              - name: vulners_api_key
-            env:
-              - name: VULNERS_API_KEY
-"""
 
 class ActionModule(ActionBase):
     DEFAULT_HEADERS = {
@@ -52,12 +34,6 @@ class ActionModule(ActionBase):
     RESULT_HTML_FILE_NAME = '/tmp/vulners_ansible_result.html'
 
     def run(self, tmp=None, task_vars=None):
-
-        #if self.KEY_NAME not in self._task.args:
-        #    if self.KEY_FILE_NAME not in self._task.args:
-        #        return {"failed": True, "msg": "One of '%s' or '%s' arguments is required" %(self.KEY_NAME, self.KEY_FILE_NAME)}
-        
-
         # Need to pop value, otherwise further module executions would fail (seemingly of unexpected arg)
         self.key = self.get_key()
 
@@ -65,34 +41,29 @@ class ActionModule(ActionBase):
             # It means no option for key was givena nad no default file was found
             return {"failed": True, "msg": "No API key was found"}
 
-        #return dict(ansible_facts=dict(result={"done":self._task.args, "vars": self._task.vars}))
-
         super(ActionModule, self).run(tmp, task_vars)
         module_return = self._execute_module(module_name='package_facts', tmp=tmp, task_vars=task_vars)
-        ret = dict()
 
         packages = list()
-        bad = list()
 
         for name, pkg_list in module_return['ansible_facts']['packages'].items():
             try:
                 source = pkg_list[0].get('source')
                 if source == 'rpm':
-                    packages += ['%(name)s-%(version)s-%(release)s.%(arch)s'%k for k in pkg_list]
+                    packages += ['%(name)s-%(version)s-%(release)s.%(arch)s' % k for k in pkg_list]
                 elif source == 'apt':
-                    packages += ['%(name)s %(version)s %(arch)s'%k for k in pkg_list]
+                    packages += ['%(name)s %(version)s %(arch)s' % k for k in pkg_list]
                 elif source == 'apk':
-                    packages += ['%(name)s-%(version)s-%(release)s x86_64 {%(name)s} (GPL-2.0-only) [installed]'%k for k in pkg_list]
+                    packages += ['%(name)s-%(version)s-%(release)s x86_64 {%(name)s} (GPL-2.0-only) [installed]' % k for k in pkg_list]
                 else:
                     self.error(f'Unknown source {source}')
             except Exception as e:
                 self.error(e)
-                bad.append(name)
 
         hostname, osname, osversion, osdversion, address = self.get_os_info(tmp=tmp, task_vars=task_vars)
 
-        if osname == 'Alpine': #TODO Dirty
-            osversion = re.match('\d+\.\d+', osdversion).group(0)
+        if osname == 'Alpine':  # TODO Dirty
+            osversion = re.match(r'\d+\.\d+', osdversion).group(0)
 
         if not len(packages):
             self.error(f'No packages found for {hostname} - {osname} v.{osversion}')
@@ -102,9 +73,9 @@ class ActionModule(ActionBase):
 
         vuln_details = self.get_cve_info(vuln_packages.get('all_cve'))
 
-        result = self.write_results(hostname, address, vuln_packages, vuln_details)
+        self.write_results(hostname, address, vuln_packages, vuln_details)
 
-        return dict(ansible_facts=dict(result={"done":"OK", "result": {"JSON_FILE": self.RESULT_FILE_NAME, "HTML_FILE": self.RESULT_HTML_FILE_NAME}}))
+        return dict(ansible_facts=dict(result={"done": "OK", "result": {"JSON_FILE": self.RESULT_FILE_NAME, "HTML_FILE": self.RESULT_HTML_FILE_NAME}}))
 
     def write_results(self, hostname, address, vuln_packages, vuln_details):
         result = {
@@ -145,10 +116,10 @@ class ActionModule(ActionBase):
             'os': osname,
             'version': osversion,
             'package': packages,
-            'apiKey': self.get_key()
+            'apiKey': self.key
         }
 
-        self.log("Running scan of %s with version %s" %(osname, osversion))
+        self.log("Running scan of %s with version %s" % (osname, osversion))
         res = post(self.VULNERS_LINKS.get('pkgChecker'), headers=self.DEFAULT_HEADERS, data=json.dumps(payload))
 
         status = res.json().get('result')
@@ -175,7 +146,7 @@ class ActionModule(ActionBase):
 
         return result
 
-    # TODO[gmedian]: pop rest of args not ot fail further execution
+    # TODO[gmedian]: pop rest of args not to fail further execution
     def get_key(self):
         if self.KEY_NAME in self._task.args:
             self._task.args.pop(self.KEY_FILE_NAME, None)
@@ -187,16 +158,16 @@ class ActionModule(ActionBase):
             with open(filename, 'r') as ifile:
                 return ifile.read().strip('\n \t')
 
-        return None 
+        return None
 
     def get_os_info(self, tmp=None, task_vars=None):
         module_return = self._execute_module(module_name='setup', tmp=tmp, task_vars=task_vars)
         with open('/tmp/os_info.txt', 'w') as ofile:
             json.dump(module_return, ofile, indent=2)
-        return module_return['ansible_facts'].get('ansible_hostname',''), \
-               module_return['ansible_facts'].get('ansible_distribution',''), \
-               module_return['ansible_facts'].get('ansible_distribution_major_version',''), \
-               module_return['ansible_facts'].get('ansible_distribution_version',''), \
+        return module_return['ansible_facts'].get('ansible_hostname', ''), \
+               module_return['ansible_facts'].get('ansible_distribution', ''), \
+               module_return['ansible_facts'].get('ansible_distribution_major_version', ''), \
+               module_return['ansible_facts'].get('ansible_distribution_version', ''), \
                module_return['ansible_facts'].get('ansible_default_ipv4', {}).get('address')
 
     def log(self, msg):
@@ -208,7 +179,7 @@ class ActionModule(ActionBase):
     def get_cve_info(self, all_cve=list()):
         payload_2 = {
             'id': all_cve,
-            'apiKey': self.get_key()
+            'apiKey': self.key
         }
         res = post(self.VULNERS_LINKS.get('cveChecker'), headers=self.DEFAULT_HEADERS, data=json.dumps(payload_2))
         cve_info = dict()
@@ -226,4 +197,4 @@ class ActionModule(ActionBase):
                     "description": description,
                     "severityText": severity
                 }
-            return cve_info
+        return cve_info

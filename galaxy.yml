@@ -12,5 +12,6 @@ tags:
 repository: "https://github.com/GMedian/vulners-ansible"
 build_ignore:
     - test
+    - template
     - .gitignore
     - '*.env'
