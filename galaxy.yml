@@ -1,4 +1,4 @@
-namespace: "gmedian"
+namespace: "vulnerscom"
 name: "vulners_ansible_plugin"
 version: "0.0.1"
 readme: "README.md"
@@ -9,7 +9,7 @@ license:
     - "GPL-3.0-only"
 tags:
     - security
-repository: "https://github.com/GMedian/vulners-ansible"
+repository: "https://github.com/vulnersCom/vulners-ansible"
 build_ignore:
     - test
     - template
